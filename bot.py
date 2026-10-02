@@ -19,17 +19,25 @@ def check_stock(ticker):
 
     df['SMA200'] = df['Close'].rolling(200).mean()
     df['Low20'] = df['Low'].rolling(20).min()
-    # ATR 14
     tr = pd.concat([(df['High']-df['Low']), (df['High']-df['Close'].shift(1)).abs(), (df['Low']-df['Close'].shift(1)).abs()], axis=1).max(axis=1)
     df['ATR'] = tr.rolling(14).mean()
 
-    yest = df.iloc[-2] # شمعة الاختراق
-    prev_high20 = df.iloc[-22:-2]['High'].max() # اعلى هاي 20 يوم قبلها
-    prev_was_breakout = df.iloc[-3]['High'] > df.iloc[-23:-3]['High'].max()
+    yest = df.iloc[-2]
+    prev_high20 = df.iloc[-22:-2]['High'].max()
 
-    # الشرط الجديد بتاعك
+    # الشرط 1: اختراق 20 يوم
     is_breakout = yest['High'] > prev_high20
-    is_fresh = not prev_was_breakout
+
+    # الشرط 2: Fresh - اخر 3 شمعات مكنش فيهم كسر
+    is_fresh = True
+    for i in range(3, 6):
+        candle_high = df.iloc[-i]['High']
+        high20_before_candle = df.iloc[-i-20:-i]['High'].max()
+        if candle_high > high20_before_candle:
+            is_fresh = False
+            break
+
+    # الشرط 3: فوق SMA200
     above_sma200 = yest['Close'] > yest['SMA200']
 
     if is_breakout and is_fresh and above_sma200:
@@ -41,7 +49,7 @@ def check_stock(ticker):
         }
     return None
 
-msg = f"🔔 *سكرينر Fresh Breakout 20D - دخول اليوم*\n📅 {pd.Timestamp.now().date()}\nالشروط: اختراق fresh + فوق SMA200\n\n"
+msg = f"🔔 *Fresh Breakout 3 Days - دخول اليوم*\n📅 {pd.Timestamp.now().date()}\n\n"
 found = 0
 for t in STOCKS:
     try:
@@ -49,12 +57,12 @@ for t in STOCKS:
         if res:
             found += 1
             msg += f"🔹 *{res['ticker']}* - اختراق {res['date']}\n"
-            msg += f"دخول: بسعر الافتتاح اليوم Market Open\n"
+            msg += f"دخول: Market Open اليوم\n"
             msg += f"وقف: 3×ATR = {res['atr']*3:.2f}$ تحت الدخول\n"
             msg += f"خروج: اقفال تحت Low20 = ${res['low20']:.2f}\n\n"
     except: continue
 
 if found == 0:
-    msg += "💤 مفيش اختراقات fresh النهاردة، ارتاح."
+    msg += "💤 مفيش فرص Fresh النهاردة."
 
 send_msg(msg)
