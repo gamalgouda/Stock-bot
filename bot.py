@@ -1,6 +1,7 @@
 # حط هنا التوكن الجديد والـ ID
-BOT_TOKEN = "7934754458:AAH5GmtDM4lwLtjVGS9glfwXMgtsOwhBCs0"
-CHAT_ID = "5443864893"
+import os
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 import requests, yfinance as yf
 from datetime import datetime
 import pytz
