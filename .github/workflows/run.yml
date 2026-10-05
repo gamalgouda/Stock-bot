@@ -2,7 +2,10 @@ name: Stock Bot
 
 on:
   schedule:
-    - cron: '30 4 * * *'
+    # قبل إغلاق السوق الأمريكي (10:30 PM مصر صيفاً)
+    - cron: '30 19 * * 1-5'
+    # بعد إغلاق السوق الأمريكي (1:00 AM مصر صيفاً)
+    - cron: '0 22 * * 1-5'
   workflow_dispatch:
 
 jobs:
