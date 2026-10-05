@@ -3,6 +3,7 @@ import requests
 import os
 import pandas as pd
 import numpy as np
+from datetime import datetime, timezone
 
 # ========= الإعدادات =========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -24,7 +25,6 @@ def send_msg(text):
         except Exception as e:
             print(f"Telegram error: {e}")
 
-# ========= 1. جلب قائمة S&P 500 =========
 def get_sp500_tickers():
     url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
     try:
@@ -34,24 +34,19 @@ def get_sp500_tickers():
         print(f"S&P 500 fetch error: {e}")
         return []
 
-# ========= 2. SPY Regime =========
 def check_spy_regime():
     try:
         spy = yf.download("SPY", period="2y", interval="1d", progress=False, auto_adjust=True)
         if isinstance(spy.columns, pd.MultiIndex):
             spy.columns = spy.columns.get_level_values(0)
         spy['SMA200'] = spy['Close'].rolling(200).mean()
-        last_close = float(spy['Close'].iloc[-1])
-        last_sma = float(spy['SMA200'].iloc[-1])
-        return last_close > last_sma
+        return float(spy['Close'].iloc[-1]) > float(spy['SMA200'].iloc[-1])
     except:
         return False
 
-# ========= 3. السكرينر =========
 def run_screener():
     tickers = get_sp500_tickers()
-    if not tickers:
-        return []
+    if not tickers: return []
     print(f"فحص {len(tickers)} سهم...")
 
     all_data = {}
@@ -81,7 +76,6 @@ def run_screener():
         try:
             closes = df['Close'].values
             highs = df['High'].values
-            lows = df['Low'].values
             n = len(df)
 
             sma200 = closes[-201:-1].mean()
@@ -90,15 +84,12 @@ def run_screener():
             if closes[-1] <= h20: continue
             if closes[-1] < sma200: continue
 
-            # Fresh breakout
             clean = True
             for k in range(2, 22):
                 if closes[-k] > highs[-k-20:-k].max():
-                    clean = False
-                    break
+                    clean = False; break
             if not clean: continue
 
-            # Reaction history
             reactions = []
             for j in range(200, n - 5):
                 if closes[j] <= highs[j-20:j].max(): continue
@@ -108,16 +99,14 @@ def run_screener():
                     idx = j - k
                     if idx - 20 < 0: continue
                     if closes[idx] > highs[idx-20:idx].max():
-                        clean_j = False
-                        break
+                        clean_j = False; break
                 if clean_j:
                     entry_lvl = highs[j]
                     max_h5 = highs[j+1:j+6].max()
                     reactions.append((max_h5 - entry_lvl) / entry_lvl * 100)
 
             if len(reactions) < MIN_PAST_SAMPLES: continue
-            recent = reactions[-10:]
-            avg_reaction = float(np.mean(recent))
+            avg_reaction = float(np.mean(reactions[-10:]))
             if avg_reaction < REACTION_MIN: continue
 
             candidates.append({
@@ -132,7 +121,6 @@ def run_screener():
     candidates.sort(key=lambda x: x['reaction'], reverse=True)
     return candidates
 
-# ========= 4. قراءة الصفقات =========
 def load_positions():
     if not SHEET_CSV: return []
     try:
@@ -143,7 +131,6 @@ def load_positions():
         print(f"Sheet error: {e}")
         return []
 
-# ========= 5. Chandelier =========
 def calc_chandelier(ticker, entry_date):
     try:
         df = yf.download(ticker, start=entry_date, interval="1d", progress=False, auto_adjust=True)
@@ -163,13 +150,19 @@ def calc_chandelier(ticker, entry_date):
     except:
         return None
 
-# ========= 6. بناء الرسالة =========
-def build_message():
+def build_message(is_before_close):
+    # Header
+    if is_before_close:
+        header = f"⏰ *تذكير قبل الإغلاق — {pd.Timestamp.now().date()}*\n"
+        header += "_الرسالة دي قبل الإغلاق — القيم مؤقتة_\n\n"
+    else:
+        header = f"📊 *تقرير الإغلاق النهائي — {pd.Timestamp.now().date()}*\n"
+        header += "_القيم النهائية بعد الإغلاق_\n\n"
+
     regime_ok = check_spy_regime()
+    header += "🌍 السوق: 🟢 SPY فوق SMA200\n" if regime_ok else "🌍 السوق: 🔴 SPY تحت SMA200\n"
 
-    header = f"📊 *تقرير يومي — {pd.Timestamp.now().date()}*\n\n"
-    header += "🌍 السوق: 🟢 SPY فوق SMA200\n" if regime_ok else "🌍 السوق: 🔴 SPY تحت SMA200 — لا صفقات جديدة\n"
-
+    # Positions
     positions = load_positions()
     pos_msg = "\n💼 *الصفقات المفتوحة:*\n"
     if not positions:
@@ -197,6 +190,7 @@ def build_message():
                 f"  أيام: {ch['days']}\n"
             )
 
+    # Screener
     screen_msg = "\n🎯 *مرشحين اليوم:*\n"
     if not regime_ok:
         screen_msg += "🔴 السوق تحت SMA200 — لا مرشحين.\n"
@@ -220,6 +214,9 @@ def build_message():
     return header + pos_msg + "\n" + "─"*25 + screen_msg
 
 if __name__ == "__main__":
-    msg = build_message()
+    # تحديد نوع الرسالة حسب الساعة UTC
+    current_hour = datetime.now(timezone.utc).hour
+    is_before_close = current_hour < 21  # 19:30 UTC = قبل، 22:00 UTC = بعد
+    msg = build_message(is_before_close)
     send_msg(msg)
     print(msg)
