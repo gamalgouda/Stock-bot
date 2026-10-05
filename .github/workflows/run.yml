@@ -1,18 +1,26 @@
-name: Stock Alert
+name: Stock Bot
+
 on:
   schedule:
-    - cron: '0 21 * * 1-5'
+    - cron: '30 4 * * *'
   workflow_dispatch:
+
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - run: pip install yfinance requests pytz
-      - run: python bot.py
+          python-version: '3.11'
+      
+      - name: Install
+        run: pip install yfinance requests pandas
+      
+      - name: Run
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          SHEET_CSV: ${{ secrets.SHEET_CSV }}
+        run: python bot.py
