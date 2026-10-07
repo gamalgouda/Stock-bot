@@ -3,7 +3,8 @@ import requests
 import os
 import pandas as pd
 import numpy as np
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo  # مكتبة أساسية في بايثون 3.9+ لضبط التوقيت
 
 # ========= الإعدادات =========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -151,12 +152,16 @@ def calc_chandelier(ticker, entry_date):
         return None
 
 def build_message(is_before_close):
+    # ضبط التاريخ بتوقيت مصر لضمان إنه نفس اليوم
+    egypt_tz = ZoneInfo("Africa/Cairo")
+    today_date = datetime.now(egypt_tz).strftime('%Y-%m-%d')
+
     # Header
     if is_before_close:
-        header = f"⏰ *تذكير قبل الإغلاق — {pd.Timestamp.now().date()}*\n"
+        header = f"⏰ *تذكير قبل الإغلاق — {today_date}*\n"
         header += "_الرسالة دي قبل الإغلاق — القيم مؤقتة_\n\n"
     else:
-        header = f"📊 *تقرير الإغلاق النهائي — {pd.Timestamp.now().date()}*\n"
+        header = f"📊 *تقرير الإغلاق النهائي — {today_date}*\n"
         header += "_القيم النهائية بعد الإغلاق_\n\n"
 
     regime_ok = check_spy_regime()
@@ -214,9 +219,10 @@ def build_message(is_before_close):
     return header + pos_msg + "\n" + "─"*25 + screen_msg
 
 if __name__ == "__main__":
-    # تحديد نوع الرسالة حسب الساعة UTC
-    current_hour = datetime.now(timezone.utc).hour
-    is_before_close = current_hour < 21  # 19:30 UTC = قبل، 22:00 UTC = بعد
+    # قراءة نوع الرسالة من الـ Environment Variable اللي في run.yml
+    msg_type = os.getenv("MESSAGE_TYPE", "post_close")
+    is_before_close = (msg_type == "pre_close")
+    
     msg = build_message(is_before_close)
     send_msg(msg)
     print(msg)
