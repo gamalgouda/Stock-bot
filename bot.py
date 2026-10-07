@@ -134,21 +134,48 @@ def load_positions():
 
 def calc_chandelier(ticker, entry_date):
     try:
-        df = yf.download(ticker, start=entry_date, interval="1d", progress=False, auto_adjust=True)
-        if len(df) < 15: return None
+        # تنظيف اسم السهم من أي مسافات
+        ticker = str(ticker).strip()
+        
+        # التأكد إن تاريخ الدخول مش فاضي
+        if not entry_date or pd.isna(entry_date):
+            print(f"❌ {ticker}: تاريخ الدخول فاضي أو غير صحيح")
+            return None
+
+        df = yf.download(ticker, start=str(entry_date).strip(), interval="1d", progress=False, auto_adjust=True)
+        
+        if df.empty:
+            print(f"❌ {ticker}: مفيش بيانات متاحة من تاريخ {entry_date}")
+            return None
+            
+        # لو السهم جديد، محتاجين على الأقل 2 أيام عشان نحسب ATR (مش شرط 15)
+        if len(df) < 2: 
+            print(f"❌ {ticker}: عدد الأيام قليل جداً ({len(df)} يوم)")
+            return None
+            
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+            
         highest = float(df['High'].max())
+        
+        # حساب ATR
         tr = pd.concat([
             df['High'] - df['Low'],
             (df['High'] - df['Close'].shift(1)).abs(),
             (df['Low']  - df['Close'].shift(1)).abs()
         ], axis=1).max(axis=1)
-        atr14 = float(tr.rolling(14).mean().iloc[-1])
+        
+        # لو عدد الأيام أقل من 14، هيحسب المتوسط على المتاح
+        atr14 = float(tr.rolling(14, min_periods=1).mean().iloc[-1]) 
+        
         current = float(df['Close'].iloc[-1])
         chandelier = highest - ATR_MULT * atr14
+        
         return {"current": current, "chandelier": chandelier, "days": len(df)}
-    except:
+        
+    except Exception as e:
+        # طباعة الإيرور الحقيقي عشان نعرف السبب في GitHub Actions
+        print(f"❌ خطأ في {ticker}: {str(e)}")
         return None
 
 def build_message(is_before_close):
