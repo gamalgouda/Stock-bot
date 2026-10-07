@@ -2,10 +2,10 @@ name: Stock Bot
 
 on:
   schedule:
-    # قبل إغلاق السوق الأمريكي (10:30 PM مصر صيفاً)
+    # قبل إغلاق السوق (10:30 PM مصر صيفاً / 9:30 PM شتاءً)
     - cron: '30 19 * * 1-5'
-    # بعد إغلاق السوق الأمريكي (1:00 AM مصر صيفاً)
-    - cron: '0 22 * * 1-5'
+    # بعد إغلاق السوق (11:45 PM مصر صيفاً / 10:45 PM شتاءً)
+    - cron: '45 20 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -23,9 +23,21 @@ jobs:
       - name: Install
         run: pip install yfinance requests pandas numpy
 
-      - name: Run
+      - name: Run Pre-Close
+        if: github.event.schedule == '30 19 * * 1-5'
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           SHEET_CSV: ${{ secrets.SHEET_CSV }}
+          MESSAGE_TYPE: 'pre_close'
+        run: python bot.py
+
+      - name: Run Post-Close
+        # لو تشغيل يدوي هيبعت رسالة "بعد الإغلاق" عشان تجرب
+        if: github.event.schedule == '45 20 * * 1-5' || github.event_name == 'workflow_dispatch'
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          SHEET_CSV: ${{ secrets.SHEET_CSV }}
+          MESSAGE_TYPE: 'post_close'
         run: python bot.py
